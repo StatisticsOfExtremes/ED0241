@@ -1,0 +1,6 @@
+"0","dados <- data.frame("
+"0","  cenario = c(""Recessão"", ""Normal"", ""Crescimento Rápido""),"
+"0","  prob = c(.25, .5, .25),"
+"0","  txRetornoA = c(-.08, .11, .25),"
+"0","  txRetornoB = c (.08, .05, -.03)"
+"0",")"

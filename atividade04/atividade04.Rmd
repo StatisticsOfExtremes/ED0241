@@ -1,0 +1,254 @@
+---
+title: "trabalho04"
+author: "Alysson da Silva Moura"
+date: "15/04/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r pacotes, message=FALSE}
+library(tidyverse)
+library(purrr)
+
+```
+ 
+
+
+### Dados
+
+Podemos reutilizar os dados da Atividade 03:
+
+```{r dados}
+dados <- data.frame(
+  cenario = c("Recessão", "Normal", "Crescimento Rápido"),
+  prob = c(.25, .5, .25),
+  txRetornoA = c(-.08, .11, .25),
+  txRetornoB = c (.08, .05, -.03)
+)
+```
+
+### Questão 01
+
+Ainda, podemos também utilizar os valores de \(\rho_{AB}\), \(\sigma_{AB}\) da
+atividade passada:
+
+
+```{r atividade03}
+retornos <- dados %>%
+  mutate(esperadoA = prob * txRetornoA,
+         esperadoB = prob * txRetornoB) %>%
+  summarise(tresperadoA = sum(esperadoA),
+            tresperadoB = sum(esperadoB),
+            dsA = sqrt(sum( (txRetornoA - tresperadoA )^2 * prob ) ),
+            dsB = sqrt(sum( (txRetornoB - tresperadoB )^2 * prob ) ),
+            covAB = sum((txRetornoA - tresperadoA) * ( txRetornoB - tresperadoB) * prob),
+            corrAB = covAB / (dsA * dsB))
+```
+
+E nós temos então:
+
+```{r tabela, echo=FALSE, message=FALSE, warning=FALSE}
+retornos %>%
+  knitr::kable(
+    col.names = c("A","B","A","B","Covariância ($\\sigma_{AB})$","Correlação ($\\rho_{AB}$)")
+  ) |> 
+  kableExtra::kable_styling(bootstrap_options = "striped", full_width = F, position = "left") |> 
+  kableExtra::add_header_above(c("Retorno Esperado ($\\bar{R}$)" = 4, "", ""))
+
+
+```
+ 
+O retorno de uma carteira qualquer é dada por:
+
+\[R_{Pj} = \sum_{i=1}^{N}(W_{i}R_{ij})\]
+
+Onde \(R_{Pj}\) é o j-ésimo retorno do portifólio (ou carteira) e \(W_{i}\) é
+a fração investida do capital do investidor na i-ésima ação e \(N\) o número de
+ações.
+
+Assim, o retorno esperado de uma carteira é:
+
+\[\overline{R} = E(R_{p}) = E\Bigg(\sum_{i = 1}^{N}W_{i}R_{ij}\Bigg)\]
+
+Como a esperança da soma é igual a soma das esperanças, podemos fazer:
+
+\[\overline{R}_{P} = \sum_{i = 1}^{N}E(W_{i}R_{ij})\]
+
+Que é igual a:
+
+\[\overline{R}_{P} = \sum_{i = 1}^{N}(W_{i}\overline{R}_{i})\]
+
+
+Já a variância (ou o risco) de um portifólio com duas ações é definida como:
+
+\[\sigma_{p}^{2}\ = E(R_{P} - \overline{R_{P}})^2 = E\big[W_{1}R_{1j} + W_{2}R_{j2} - (W_{1}\overline{R}_{1} + X_{2}\overline{R}_{2})\big]^2 \]
+
+E, fazendo as operações, podemos encontrar que:
+
+\[ \sigma^{2}_{P} = W_{1}^{2}\sigma^{2}_{1} + W^{2}_{2}\sigma_{2}^{2} +  2W_{1}W_{2}\sigma_{12}\]
+
+Em uma carteira *Equal Wage* divide-se o capital igualmente entre os ativos, ou seja:
+
+\[W_{1} = W_{2} = 0.5\]
+
+O retorno é então:
+
+```{r questao01a}
+
+pesosEqual <- c(0.5, 0.5)
+
+# mapeia os pesos para os retonos dos assets
+
+mapRetorno <- function(pesos, retornos) {
+  map2_dbl(pesos, retornos,`*`)
+}
+
+#retornosEqual <- map2_dbl(pesosEqual, retornos |> select(c(1:2)), ~ .x * .y )
+
+sum(mapRetorno(pesosEqual, retornos |> select(c(1:2))))
+
+#sum(retornosEqual)
+```
+
+E a variância:
+
+
+```{r questao01b, echo=TRUE, warning=TRUE}
+
+varPortifolio <- function(pesoj, pesok, dj, dk, cov) {
+  pesoj^2 * dj^2 + pesok^2 * dk^2 + 2*pesok*pesoj*cov
+}
+
+
+varEqual <- varPortifolio(pesosEqual[1], pesosEqual[2],
+                          retornos$dsA, 
+                          retornos$dsB,
+                          retornos$covAB)
+
+varEqual
+
+```
+
+---
+
+Para a carteira de variância minima, temos que:
+
+\[\min_{w_{1}} w_{1}^2 \sigma_{1}^{2} +  (1 - w_{1})^2 \sigma^{2}_{2} + 2w_{1}\sigma_{12} - 2w_{1}^{2}\sigma_{12} \]
+
+derivando em relação a \(w_{1}\) temos:
+
+\[w^{*}_{1} = \frac{\sigma_{2}^{2} - \sigma_{12} }{ \sigma_{1}^{2} + \sigma_{2}^2 - 2 \sigma_{12}}\]
+
+e, por definição, \(w_{2}^{*} = 1 - w_{1}^{*}\)
+
+Numericamente:
+
+```{r questao02a_1}
+
+#peso que minimiza a variancia
+pesoMinVar <- function(dj, dk, cov) {
+  (dj^2 - cov) / (dj^2 + dk^2 - 2*cov)
+}
+
+pesoMinVar(retornos$dsA, retornos$dsB, retornos$covAB)
+
+#Vamo chamar isso de W1MIN pra evitar nomezão
+
+W1MIN <- pesoMinVar(retornos$dsA, retornos$dsB, retornos$covAB)
+
+```
+
+E o retorno:
+
+```{r questao02a2}
+pesosMin <- c(W1MIN, 1 - W1MIN)
+
+
+retornosMin <- map2_dbl(pesosMin, retornos |> select(1:2), ~ .x * .y)
+
+sum(retornosMin)
+
+```
+
+E a variância:
+
+
+```{r questao02b}
+
+varEqual <- varPortifolio(pesosMin[1], pesosMin[2],
+                          retornos$dsA, 
+                          retornos$dsB,
+                          retornos$covAB)
+
+varEqual
+```
+
+---
+Pode-se definir o prêmio de risco como:
+
+\[P = E(R_P) - r_{f}\]
+
+Onde \(r_{f}\) é o retorno do ativo _risk-free_
+
+E uma carteira eficiente como aquela que maximiza o Coeficiente de Recompensa (\(S\)):
+
+\[S = \frac{P}{\sigma_p}\].
+
+
+A partir disso, podemos criar um `DataFrame` com os valores que precisamos:
+
+```{r questao03a_df}
+
+rbarra <- retornos |> select(1:2) |> as_vector()
+pesoRf <- 0.2
+
+df <- data.frame(
+  pesoj = seq(0, 1, by = .05)) |>
+  mutate(pesok = 1 - pesoj,
+         retornoP = pesoj * rbarra[1] + pesok * rbarra[2],
+         varP = sqrt(varPortifolio(pesoj, pesok,retornos$dsA,retornos$dsB,retornos$covAB)),
+         slpRf = (retornoP - 0.05) / varP,
+         retornoC = 0.05 * pesoRf + (1 - pesoRf) * retornoP
+  )
+
+```
+
+E a carteira de maior recompensa:
+
+```{r}
+df |> filter(slpRf == max(slpRf))
+```
+
+E a de menor risco:
+
+```{r}
+df |> filter(varP == min(varP))
+```
+
+
+
+Graficamente temos:
+
+```{r questao03b_graph, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+ggplot(df, aes(x = varP, y = retornoP, )) +
+  geom_path(aes(colour = "CPI"), size = 1.01) +
+  geom_abline(aes(intercept = 0.05, slope = max(df$slpRf), colour = "LAC"), show.legend = T) +
+  geom_point(aes(x=varP[slpRf == max(slpRf)], y=retornoP[slpRf == max(slpRf)]), colour = "red") +
+  #Maior premio de risco
+  annotate("text", x=df$varP[df$slpRf == max(df$slpRf)],
+           y=df$retornoP[df$slpRf == max(df$slpRf)] + 0.005, label = "max(S)" ) +
+  #Menor variancia
+  geom_point(aes(x=min(varP), y=retornoP[varP == min(varP)]), colour = "red") +
+  annotate("text", x=df$varP[df$varP == min(df$varP)] + 0.0065,
+           y=df$retornoP[df$varP == min(df$varP)], label = "min(sigma[P])", parse = T) +
+  ylab("Retorno Esperado") + xlab("Desvio Padrão") +
+  scale_color_manual(name = "Curvas", values = c("CPI" = "darkblue", "LAC" = "red")) +
+  theme_bw()+
+  scale_y_continuous(labels = scales::percent) + 
+  scale_x_continuous(labels = scales::percent)
+```
+
+

@@ -1,0 +1,119 @@
+---
+title: "Atividade 03 - Gestão de Risco"
+author: "Alysson da Silva Moura"
+date: "02/04/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Pacotes
+
+```{r pacotes, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+
+```
+
+## Dados
+
+Vamos criar o DataFrame dos dados:
+
+```{r dados}
+dados <- data.frame(
+  cenario = c("Recessão", "Normal", "Crescimento Rápido"),
+  prob = c(.25, .5, .25),
+  txRetornoA = c(-.08, .11, .25),
+  txRetornoB = c (.08, .05, -.03)
+)
+```
+
+---
+
+# Questões
+
+---
+
+1. Calcule os retornos esperados dos títulos A e B
+2. Calcule o desvio padrão dos títulos A e B
+3. Calcule o Coeficiente de Correlação
+
+---
+
+Seja $\bar{R}$ o retorno esperado do título, então:
+
+  \[ \bar{R} = E(r)= \sum_{i = 0}^{n} r_{i} p_{i} \]
+
+Onde:
+
+* r: Taxa de Retorno do Título no i-ésimo Cenário
+* i: Cenários
+* p: Probabilidade do i-ésimo Cenário
+
+Então temos:
+
+```{r questao01}
+retornos <- dados %>%
+  mutate(esperadoA = prob * txRetornoA,
+         esperadoB = prob * txRetornoB) %>%
+  summarise(tresperadoA = sum(esperadoA),
+            tresperadoB = sum(esperadoB)
+  )
+```
+
+
+O Desvio-padrão $(\sigma_{k})$ do k-ésimo título é dado por:
+
+\[\sigma_{k} = \sqrt{ \sum_{i = 0}^{n} (r_{i} - \bar{R})^{2}  p_{i}}\]
+
+
+```{r questao02}
+
+retornos <- dados %>%
+  mutate(esperadoA = prob * txRetornoA,
+         esperadoB = prob * txRetornoB) %>%
+  summarise(tresperadoA = sum(esperadoA),
+            tresperadoB = sum(esperadoB),
+            dsA = sqrt(sum( (txRetornoA - tresperadoA )^2 * prob ) ),
+            dsB = sqrt(sum( (txRetornoB - tresperadoB )^2 * prob ) )
+            )
+
+```
+
+Para calcularmos a Correlação entre os títulos A e B, precisaremos primeiro
+definir a Covariância entre os dois títulos, assim, sendo $Cov(R_{A}, R_{B})$
+a covariância entre os retornos de títulos A $(R_{A})$ e B ($R_{B}$), temos que:
+
+\[\sigma_{AB} = Cov(R_{A}, R_{B}) = \sum_{i = 0}^{n} (r_{i}^{A} - R_A) (r_{i}^{B} - R_{B})p_{i}\]
+
+dessa forma, a correlação entre os títulos A e B é dada por:
+
+\[\rho_{AB} = Corr(R_A, R_B) = \frac{\sigma_{AB}}{\sigma_{A} * \sigma_{B}}\]
+
+
+```{r questao03}
+
+retornos <- dados %>%
+  mutate(esperadoA = prob * txRetornoA,
+         esperadoB = prob * txRetornoB) %>%
+  summarise(tresperadoA = sum(esperadoA),
+            tresperadoB = sum(esperadoB),
+            dsA = sqrt(sum( (txRetornoA - tresperadoA )^2 * prob ) ),
+            dsB = sqrt(sum( (txRetornoB - tresperadoB )^2 * prob ) ),
+            covAB = sum((txRetornoA - tresperadoA) * ( txRetornoB - tresperadoB) * prob),
+            corrAB = covAB / (dsA * dsB)
+            )
+```
+
+E a tabela que sumariza as questões:
+
+```{r tabelafinal, echo=FALSE, paged.print=TRUE}
+retornos |>
+  kbl(col.names = c("A","B","A","B","Covariância ($\\sigma_{AB})$","Correlação ($\\rho_{AB}$)"), booktabs = T, escape = F) |> 
+  kable_styling(latex_options = c("striped", "scale_down"),
+                            full_width = F)|>  
+  add_header_above(c("Retorno Esperado ($\\\\overline{R}$)" = 2,"Desvio-padrão ($\\\\sigma_{k}$)" = 2, " ", " "), escape = F)
+
+```
+
