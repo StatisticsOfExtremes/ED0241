@@ -1,0 +1,138 @@
+---
+title: "Avaliação Parcial 2"
+author: "Alysson da Silva Moura"
+date: "24/06/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+# Questões
+
+Baixar dados de 01/01/2021 a 15/06/2022 da ação selecionada. Vamos analisar 6 trimestres.
+
+1.  Introdução (2 PONTOS) a) Análise estatística e gráfica da série histórica em nível e de retornos. b) Baixe os dados de um empresa concorrente e observe se o comportamento gráfico é semelhante (colocar as duas séries no mesmo gráfico).
+
+2.  Value at Risk: Considere um investimento de R\$100mil e o Z=-1,645 (nível de confiança de 95%). (4 PONTOS) a) Calcular para cada um dos 6 trimestres o Value at Risk Relativo e Absoluto b) Usar gráficos de barras para analisar o comportamento do risco ao longo dos 6 trimestres.
+
+3.  CAPM: Considere o ativo livre de risco 6%a.a. e base 252. (4 PONTOS)
+
+    a)  Calcular para cada um dos 6 trimestres o BETA do CAPM.
+    b)  Usar gráficos de barra para analisar o comportamento do BETA ao longo dos 6 trimestres.
+    c)  Analisar dentro de cada trimestre se o retorno médio do ativo é justo pela equação do CAPM, e se ativo está sobreprecificado ou subprecificado?
+
+------------------------------------------------------------------------
+
+# Pacotes
+
+```{r pacotes, message=FALSE, warning=FALSE}
+library(quantmod)
+library(tidyverse)
+library(patchwork)
+library(stargazer)
+```
+
+Os \*ticks\* escolhidos foram $BTC$ e $ETH$, vamos utilizar o pacote `quantmod` podemos usar a função `quantmod::getSymbols()` para pegar os dados do yahoo:
+
+```{r pegando os dados}
+btc <- quantmod::getSymbols("BTC-USD", src = "yahoo", from = as.Date("2021-01-01"), to = as.Date("2021-06-15"), auto.assign = F)
+eth <- quantmod::getSymbols("ETH-USD", src = "yahoo", from = as.Date("2021-01-01"), to = as.Date("2021-06-15"), auto.assign = F)
+```
+
+Primeiro pegaremos só o preço de fechamento dessas ações:
+
+```{r fechamento}
+btc_p <- btc$`BTC-USD.Close`
+eth_p <- eth$`ETH-USD.Close`
+```
+
+Então criaremos uma função para plotar os gráficos do BTC-USD e do ETH-USD
+
+```{r estatísticas descritivas}
+
+plotData <- function(data, ticker){
+  
+  #Plota os retornos diários do ticker
+ daily <- data %>%
+   dailyReturn() %>%
+   setNames("returns") %>%
+   ggplot(aes(x = Index, y = returns)) +
+   geom_line() +
+   labs(y = "Retorno (%)", x = "", title = paste0("Retorno (em %) do ", ticker))
+ 
+  #Plota os retornos em nível do ticker
+
+ level <- data %>%
+   setNames("price") %>%
+   ggplot(aes(x = Index, y = log(price))) +
+   geom_line() +
+   labs(y = "log(Preço (US$))", x = "",
+        title = paste0("log(Preço (US$)) do ", ticker))
+
+  list(daily = daily, level = level)
+}
+```
+
+Então chamamos a função `plotData` para os valores do `btc_p` e `eth_p` e utilizamos o pacote \`patchwork\`\` para dividir os *plots*:
+
+```{r plotando os tickers}
+btcPlot <- btc_p %>% plotData("BTC-USD")
+ethPlot <- eth_p %>% plotData("ETH-USD")
+
+
+levelPlots <- btcPlot$level + ylim(6, 12) + ethPlot$level + ylim(6, 12)
+
+# Já tem a mesma escala
+dailyPlots <- ethPlot$daily +
+  btcPlot$daily
+
+
+levelPlots / dailyPlots
+
+```
+
+```{r descritivo}
+
+dados <- merge(btc_p, eth_p, all = F) %>%
+  coredata() %>%
+  as.data.frame() %>%
+  rename(btc = BTC.USD.Close, eth = ETH.USD.Close)
+
+dados |> 
+  group_by() |>
+  summarise(
+    across(everything(),
+           .fns = list(media = mean, desvio = sd, variancia = ~sd(.x)^2),
+           .names = "{.col}_{.fn}")
+  ) %>%
+```
+
+    bhp2 = BHP$BHP.AX.Close
+    # covert to returns
+
+    bhp_ret = dailyReturn(bhp2, type = "log")
+    den1_r = coredata(bhp_ret)
+    den1_bhp = dnorm(x = den1_r, mean = mean(den1_r), sd = sd(den1_r))
+    data_rd = data.frame(den1_r, den1_bhp)

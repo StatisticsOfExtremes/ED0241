@@ -1,0 +1,116 @@
+---
+title: "ap1"
+author: "Alysson da Silva Moura"
+date: "03/05/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Pacotes
+
+```{r pacotes, message=FALSE, warning=FALSE}
+library(readxl)
+library(tidyverse)
+library(lubridate)
+library(timeSeries)
+library(fPortfolio)
+```
+
+Lendo a base
+
+```{r dados}
+
+dados <- readxl::read_xlsx("Base AP1.xlsx")
+```
+
+------------------------------------------------------------------------
+
+### Questões
+
+Selecione 5 ativos para sua carteira no período de 03/05/2021 a 31/12/2021 e construa:
+
+#### Questão 01
+
+Primeiro precisamos selecionar a data e os ativos que queremos, no meu caso vou escolher os 5 primeiros:
+
+```{r filtering the data}
+
+dadosSelected <- dados %>% dplyr::filter(data >= dmy("03/05/2021") & data <= dmy("31/12/2021")) %>% select(1:6)
+
+```
+
+Os stocks selecionados são então: **GGBR4**, **ELET6**, **VIVT3**, **PETR4**, **CSNA3**
+
+Precisamos depois dos retornos das ações:
+
+```{r calculando-retornos}
+
+retornos <- dadosSelected |> mutate(across(2:6, ~ c(NA, diff(.x)) / stats::lag(.x))) |> na.omit()
+```
+
+Com isso agora podemos utilizar o pacote `fPortifolio` para estimar: o portifolio eficiênte, i.e., o que tem o melhor risco/retorno, o que minimiza o risco e a fronteira de investimentos.
+
+```{r carteira-weights}
+
+tsRetornos <- as.timeSeries(retornos)
+
+portifolioEficiente <- tangencyPortfolio(tsRetornos, spec = portfolioSpec(), constraints = "LongOnly")
+
+portifolioEficiente
+```
+
+
+E a carteira que minimiza o risco será:
+```{r}
+
+minRisk <- minvariancePortfolio(tsRetornos, spec = portfolioSpec(), constraints = "LongOnly")
+
+minRisk
+```
+
+```{r}
+
+fronteira <- portfolioFrontier(tsRetornos)
+
+frontierPlot(fronteira, col = c('blue', 'red'), pch = 20)
+
+monteCarloPoints(fronteira, mcSteps = 10000, pch = 20, cex = 0.25 )
+
+```
+
+
+### Questão 02
+
+Precisaremos utilizar o pacote `quantmod` para capturar os dados do IBOV, depois
+multiplicaremos os pesos da carteira de risco minimo pelos retornos dos ativos,
+juntaremos tudo isso num `DataFrame` e plotaremos usando o `ggplot`
+
+```{r estatistica-desc}
+
+#pega os pesos do risco minimo
+minRiskW <- minRisk@portfolio@portfolio[["weights"]]
+
+equalWeights <- seq(0.5, by = 5)
+
+a <-  retornos %>% select(-data)
+
+
+quantmod::getSymbols("^BVSP",
+           periodicity='daily', 
+           from='2021-05-04',
+           to='2021-12-31'
+           )
+
+comparar <- cbind(retornos %>% select(data),
+                  minrisk = rowSums(as.matrix(a) * minRiskW),
+                  equalw = rowSums(as.matrix(a) * equalWeights),
+                  ibov = quantmod::dailyReturn(BVSP)
+                  )
+
+comparar |>
+  pivot_longer(!data, names_to = "carteira") |> 
+  ggplot() +
+  geom_line(aes(x = data, y = value, colour = carteira)) +
+  ylab("Retorno") + xlab("Data")
+```
