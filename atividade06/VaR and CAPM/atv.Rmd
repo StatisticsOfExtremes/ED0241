@@ -32,6 +32,7 @@ library(quantmod)
 library(tidyverse)
 library(patchwork)
 library(stargazer)
+library(lubridate)
 ```
 
 Os \*ticks\* escolhidos foram $BTC$ e $ETH$, vamos utilizar o pacote `quantmod` podemos usar a função `quantmod::getSymbols()` para pegar os dados do yahoo:
@@ -40,10 +41,10 @@ Os \*ticks\* escolhidos foram $BTC$ e $ETH$, vamos utilizar o pacote `quantmod` 
 btc <- quantmod::getSymbols("BTC-USD",
                             src = "yahoo",
                             from = as.Date("2021-01-01"),
-                            to = as.Date("2021-06-15"), auto.assign = F)
+                            to = as.Date("2022-06-15"), auto.assign = F)
 eth <- quantmod::getSymbols("ETH-USD", src = "yahoo",
                             from = as.Date("2021-01-01"),
-                            to = as.Date("2021-06-15"), auto.assign = F)
+                            to = as.Date("2022-06-15"), auto.assign = F)
 ```
 
 Primeiro pegaremos só o preço de fechamento dessas ações:
@@ -60,8 +61,7 @@ into_df <- function (data, ticker) {
   data.frame(date = zoo::index(data),
              price = zoo::coredata(data),
              ticker = rep(ticker, length(zoo::coredata(data)))) %>%
-    setNames(c("date", "price", "ticker")) %>%
-    dplyr::arrange(dplyr::desc(date))
+    setNames(c("date", "price", "ticker"))
 }
 ```
 
@@ -125,7 +125,6 @@ Então chamamos a função `plotData` para os valores do `btc_p` e `eth_p` e uti
 
 plots <- dailyPlot | levelPlot
 
-plots
 ```
 
 ```{r include=FALSE}
@@ -161,4 +160,111 @@ dados |>
             type = "latex",
             column.labels = "",
             covariate.labels = c("BTC-USD", "ETH-USD"))
+```
+
+---
+
+Considerando um investimento de R\$ 100.000,00:
+
+```{r valor investimento}
+
+valor_investimento <- 100000
+```
+
+```{r alphavalues}
+
+zValue <- 1.645
+
+```
+
+Como temos que separar os nossos dados em trimestres, foi verificado a quantidade de semestres necessários:
+
+```{r numero de trimestres}
+
+num_trimestres <- interval(ymd(min(btc_r_df$date)), ymd(max(btc_r_df$date))) %/% months(3) + 1
+```
+
+Foi criado então uma função para gerar as datas chave (começo e fim do semestre), para então verificar junto ao `DataFrame` a qual semestre aquela data pertence
+
+```{r}
+
+dataComeco <- ymd("2021-01-01")
+dataFinal <- ymd("2022-06-15")
+
+trimestres <- function (dataAtual, dataFinal) {
+  if (dataAtual < dataFinal) {
+    dataAtual
+  } else {
+    dataFinal
+  }
+}
+
+vTrimestres <- seq(0, num_trimestres * 3 , by = 3) %>% purrr::map(~trimestres(dataAtual = dataComeco + months(.x), dataFinal = dataFinal))
+```
+
+```{r verificando os trimestres}
+
+btc_t <- btc_df %>%
+  mutate(trimestre = case_when(
+    between(as.Date(date), vTrimestres[[1]], vTrimestres[[2]]) ~ "1 Trimestre",
+    between(as.Date(date), vTrimestres[[2]], vTrimestres[[3]]) ~ "2 Trimestre",
+    between(as.Date(date), vTrimestres[[3]], vTrimestres[[4]]) ~ "3 Trimestre",
+    between(as.Date(date), vTrimestres[[4]], vTrimestres[[5]]) ~ "4 Trimestre",
+    between(as.Date(date), vTrimestres[[5]], vTrimestres[[6]]) ~ "5 Trimestre",
+    between(as.Date(date), vTrimestres[[6]], vTrimestres[[7]]) ~ "6 Trimestre"
+  )) %>%
+  nest(data = c(-ticker, -trimestre))
+
+head(btc_t)
+```
+
+Podemos então criar uma nova coluna `retorno` com os retornos do ativo para cada um dos semestres, e, a partir dela, criar uma variável de $VaR$ absoluto e relativo:
+
+```{r var absoluto e relativo}
+
+btc_t <- btc_t %>% mutate(retornos = map(data, ~data.frame(retorno = .x$price / lag(.x$price) - 1, date = .x$date)),
+                          VaR_r = map(retornos, ~ sd(.x$retorno,na.rm = T) * zValue * valor_investimento),
+                          VaR_a = map(retornos, ~ valor_investimento * (sd(.x$retorno, na.rm = T) * zValue - mean(.x$retorno, na.rm = T))))
+
+
+```
+
+```{r value-at-risk plot}
+
+var_r_plot <- btc_t %>%
+  ggplot(aes(trimestre, VaR_r, fill = trimestre)) +
+  geom_col(width = 0.5) +
+  theme_minimal() +
+  labs(title = "Value-At-Risk Relativo", x = "", y = "VaR Relativo (R$)") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+```{r}
+
+var_a_plot <- btc_t %>%
+  ggplot(aes(trimestre, VaR_a, fill = trimestre)) +
+  geom_col(width = 0.5, show.legend = F) +
+  theme_minimal() +
+  labs(title = "Value-At-Risk Absoluto", x = "", y = "VaR Absoluto (R$)") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+var_a_plot
+```
+
+```{r}
+
+
+var_r_a_plot <- var_a_plot / var_r_plot
+
+pngfile <- fs::path(knitr::fig_path(),  "ValueAtRisk.png")
+ggsave(
+  pngfile, 
+  var_r_a_plot, 
+  device = ragg::agg_png, 
+  width = 22, height = 17, units = "cm", res = 600,
+  scaling = 1
+)
+
+knitr::include_graphics(pngfile)
 ```
